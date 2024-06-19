@@ -1,0 +1,3 @@
+[['ctrl+1'],[[['backspace'],['delete']],[['alt+t'],['alt+f6']]]]
+[['ctrl+0'],[[['s'],['f']]]]
+[['ctrl + 0','ctrl + 1']]
