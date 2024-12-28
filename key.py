@@ -1,93 +1,79 @@
-from icecream import ic
-import keyboard
+import threading
 import ast
-from time import sleep as ts
-ic.configureOutput(includeContext=True,prefix='(ic):')
-def on_key_press(event):
-    if event.event_type == 'down':
-        keyhot = ''
-        if keyboard.is_pressed('tab'):
-            keyhot += 'tab+'
-        if keyboard.is_pressed('shift'):
-            keyhot += 'shift+'
-        if keyboard.is_pressed('ctrl'):
-            keyhot += 'ctrl+'
-        if keyboard.is_pressed('alt'):
-            keyhot += 'alt+'
-        if keyboard.is_pressed('win'):
-            keyhot += 'win+'
-        char = event.name
+import os
+import subprocess
 
-        return keyhot + char
+processes = []  
+stop_event = threading.Event() 
 
-    # return ''
-def rkey(event):
-    global tlu,i
-    key_pressed = on_key_press(event)
-    bool = False
-    ic('\n\n')
-    if key_pressed in k[-1]:          
-        keyboard.unhook_all_hotkeys()
-
-    for tlu in range(len(k)):
-        ic(tlu,k[tlu],k[tlu][0],k[tlu][0][0],key_pressed)
-        if key_pressed == k[tlu][0][0]:
-            bool = True
-            ic(k[tlu][0],'ok')
-            keyboard.unhook_all_hotkeys()
-            # ts(tm)
-            for item in k[tlu][1]:
-                ic(item)
-                hotkey = item[0][0]
-                remapped_key = item[1][0]
-                keyboard.remap_hotkey(hotkey, remapped_key)
-            ts(1)
+def print_output(process):
+    global stop_event
+    while not stop_event.is_set():  
+        output = process.stdout.readline()
+        if not output: 
             break
-        else:
-            if len(k[-1])==0:continue
+        print(f"Raw output from process: {output.strip()}")
+        try:
+            result_data = ast.literal_eval(output.strip())
+            handle_key_press(result_data)
+        except Exception as e:
+            print(f"Error processing output: {e}")
+def handle_key_press(result_data):
+    global k  
+    i=0
+    for n, key_pressed in result_data.items():
+        bool = False
+        if key_pressed in k[-1][-1] or key_pressed in k[-1][0]:
+            terminate_processes()
 
-            if len(k[-1])==1 and tlu<len(k[-1]):
-                if key_pressed == k[-1][tlu] and not bool:
-                    bool = True
-                    i=i+1
-                    if i==len(k)-2:i=0
-                    keyboard.unhook_all_hotkeys()
-                    # ts(tm)
-                    ic('right',i)
-                    for item in k[i][1]:
-                        hotkey = item[0][0]
-                        remapped_key = item[1][0]
-                        keyboard.remap_hotkey(hotkey, remapped_key)
-                    break
+        for tlu in range(len(k)):
+            if key_pressed == k[tlu][0][0]:
+                bool = True
+                run_blocking_exe(k[tlu][1])  
+            else:
+                if len(k[-1]) == 0: continue
+                if len(k[-1]) < 0 and tlu < len(k[-1]):
+                    if key_pressed == k[-1][tlu] and not bool:
+                        bool = True
+                        i = (i + 1) % (len(k) - 1)
+                        run_blocking_exe(k[i][1])
+        if key_pressed == k[-1][-1][0]:
+            terminate_processes()
+            break
             
-            if len(k[-1])==2 and tlu<len(k[-1]):
-                ic(k[-1][0])
-                ic(k[-1][tlu])
-                if key_pressed == k[-1][tlu] and not bool:
-                    bool = True
-                    i=i+1
-                    if i==len(k)-2:i=0
-                    keyboard.unhook_all_hotkeys()
-                    # ts(tm)
-                    ic('left',i)
-                    for item in k[i][1]:
-                        hotkey = item[0][0]
-                        remapped_key = item[1][0]
-                        keyboard.remap_hotkey(hotkey, remapped_key)
-                    break
-                if key_pressed == k[-1][tlu] and not bool:
-                    bool = True
-                    i=i-1
-                    if i==-1:i=len(k)-2
-                    keyboard.unhook_all_hotkeys()
-                    # ts(tm)
-                    ic('right',i)
-                    for item in k[i][-2]:
-                        hotkey = item[0][0]
-                        remapped_key = item[1][0]
-                        keyboard.remap_hotkey(hotkey, remapped_key)
-                    break
-        
+
+def run_blocking_exe(args=['']):
+    exe_path = os.path.join('reassignment.exe')
+    print(f"Executing: {exe_path}, Arguments: {args}")
+
+    process = subprocess.Popen(
+        [exe_path] + args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    processes.append(process)
+    global stop_event
+    stop_event.clear()  
+    output_thread = threading.Thread(target=print_output, args=(process,))
+    output_thread.start()
+    try:
+        output_thread.join()  
+    except:
+        terminate_processes()
+def terminate_processes():
+    for process in processes:
+        try:
+            process.terminate() 
+            process.kill() 
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            print(f"Process {process.pid} did not terminate in time; killing it.")
+            process.kill() 
+        except Exception as e:
+            print(f"Error terminating process {process.pid}: {e}")
+      
 tlu = 0
 k=[]
 with open('date.txt', 'r') as f:
@@ -97,11 +83,4 @@ with open('date.txt', 'r') as f:
             k.append(data[0])
         else:
             k.append(data)
-ic(k[-1])
-# ic.disable()
-for i in k[tlu][1]:
-    keyboard.remap_hotkey(i[0][0],i[1][0])
-i=0
-keyboard.on_press(rkey)
-
-keyboard.wait('enter+f20+alt')
+key=run_blocking_exe(k[tlu][1])
